@@ -1,25 +1,5 @@
 Antes de comenzar verifica que no tengas ningun contenedor corriendo con Docker Desktop, especialmente los que ocupen el puerto `5432`
 
-# Desarrollo manual
-
-## api-node
-
-1. Instalar NVM
-  - en Windows: [https://github.com/coreybutler/nvm-windows](https://github.com/coreybutler/nvm-windows)
-  - en Linux: [https://github.com/nvm-sh/nvm](https://github.com/nvm-sh/nvm)
-
-2. Lanzar contenedor PostgreSQL `docker run -d -e POSTGRES_PASSWORD=foobarbaz -p 5432:5432 postgres:15.1-alpine`
-
-3. Nos ubicamos en la carpeta `api-node` con una terminal **PowerShell**
-
-```bash
-nvm install 19.4
-nvm use 19.4
-npm install
-$env:DATABASE_URL="postgres://postgres:foobarbaz@localhost:5432/postgres"
-npm run dev
-```
-
 # Desarrollo con Docker
 
 Un Dockerfile es un archivo de texto que contiene todos los comandos para crear una imagen de contenedor, es como una receta para la aplicación.
@@ -265,3 +245,133 @@ Crear contenedor
 En tu navegador dirigete a la ruta `localhost:5173` y veras el resultado.
 
 ![react page screenshot](screenshot.webp)
+
+# Orquestación con Docker Compose
+
+Toda la infraestructura puede levantarse y gestionarse de manera integrada mediante `docker-compose.yaml` iniciando con la siguiente estructura:
+
+```
+├── api-nodejs/      # Backend en Node.js
+├── api-golang/      # Backend en Go
+├── client-react/    # Frontend en React
+├── docker-compose.yaml
+```
+
+## Requisitos previos
+
+- Docker instalado
+- No tener contenedores ocupando puertos:
+  - 5432 → PostgreSQL
+  - 3000 → API Node.js
+  - 8080 → API Golang
+  - 5173 → React frontend
+
+## Conceptos básicos
+
+Antes de escribir el docker-compose.yaml, repasemos los elementos principales:
+
+- `services`: cada servicio representa un contenedor (o conjunto de contenedores).
+- `build`: define cómo construir la imagen a partir de un Dockerfile.
+- `image`: nombre de la imagen generada o usada.
+- `ports`: mapea puertos entre el contenedor y la máquina host (HOST:CONTENEDOR).
+- `environment`: define variables de entorno para configurar el contenedor.
+- `volumes`: permiten persistir datos fuera del ciclo de vida del contenedor.
+- `networks`: crean redes virtuales para que los contenedores se comuniquen entre sí.
+- `depends_on`: indica dependencias entre servicios, garantizando que uno se inicie después de otro.
+- `restart`: política de reinicio automático (unless-stopped evita reinicios tras un docker stop).
+
+## Archivo docker-compose.yaml
+
+```
+services:
+  # Servicio de base de datos
+  devops-postgres:
+    container_name: devops-postgres
+    image: postgres:15.1-alpine   # Imagen oficial optimizada
+    environment:
+      - POSTGRES_PASSWORD=foobarbaz   # Password de usuario por defecto
+    volumes:
+      - pgdata:/var/lib/postgresql/data   # Persistencia de datos
+    ports:
+      - "5432:5432"   # Exponer puerto para conexiones externas
+    networks:
+      - devops-network
+    restart: unless-stopped
+
+  # API en Node.js
+  contenedor-devops-api-node:
+    container_name: contenedor-devops-api-node
+    build:
+      context: ./api-nodejs       # Ruta donde está el Dockerfile
+      dockerfile: Dockerfile
+    image: devops-api-node
+    environment:
+      - DATABASE_URL=postgres://postgres:foobarbaz@devops-postgres:5432/postgres
+    depends_on:
+      - devops-postgres
+    ports:
+      - "3000:3000"
+    networks:
+      - devops-network
+    restart: unless-stopped
+
+  # API en Go
+  contenedor-devops-api-golang:
+    container_name: contenedor-devops-api-golang
+    build:
+      context: ./api-golang
+      dockerfile: Dockerfile
+    image: devops-api-golang
+    environment:
+      - DATABASE_URL=postgres://postgres:foobarbaz@devops-postgres:5432/postgres
+    depends_on:
+      - devops-postgres
+    ports:
+      - "8080:8080"
+    networks:
+      - devops-network
+    restart: unless-stopped
+
+  # Cliente en React
+  client-react:
+    build:
+      context: ./client-react
+      dockerfile: Dockerfile
+    image: devops-client-react
+    depends_on:
+      - contenedor-devops-api-node
+      - contenedor-devops-api-golang
+    ports:
+      - "5173:5173"
+    networks:
+      - devops-network
+    restart: unless-stopped
+
+# Definición de volúmenes persistentes
+volumes:
+  pgdata:
+
+# Definición de redes internas para la comunicación entre servicios
+networks:
+  devops-network:
+```
+
+## Construcción y ejecución
+
+1. Construir imagenes:
+
+```
+docker compose build  
+```
+
+2. Levantar la infraestructura
+
+```
+docker compose up -d  
+```
+
+3. Detener contenedores
+
+```
+docker compose down  
+```
