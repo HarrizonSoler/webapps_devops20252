@@ -302,7 +302,7 @@ services:
   contenedor-devops-api-node:
     container_name: contenedor-devops-api-node
     build:
-      context: ./api-nodejs       # Ruta donde está el Dockerfile
+      context: ./api-node       # Ruta donde está el Dockerfile
       dockerfile: Dockerfile
     image: devops-api-node
     environment:
@@ -367,7 +367,7 @@ docker compose build
 2. Levantar la infraestructura
 
 ```
-docker compose up -d  
+docker compose up
 ```
 
 3. Detener contenedores
